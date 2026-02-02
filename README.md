@@ -36,6 +36,7 @@ docker push your-registry/laser-arena:latest
 ```
 
 Then the container is hosted on an AZ Container App using the docker.io/tybennett/laser-arena:latest image 
+
 ---
 
 Built for a kids' demo 🎮 Have fun!
