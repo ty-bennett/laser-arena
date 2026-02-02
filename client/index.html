@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ LASER ARENA ⚡</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: #0a0a0f;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Share Tech Mono', monospace;
+      overflow: hidden;
+    }
+    
+    /* Scanline effect */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.1) 0px,
+        rgba(0, 0, 0, 0.1) 1px,
+        transparent 1px,
+        transparent 2px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+    
+    #game-container {
+      position: relative;
+      border: 4px solid #333;
+      box-shadow: 
+        0 0 20px rgba(0, 255, 255, 0.3),
+        0 0 40px rgba(255, 0, 255, 0.2),
+        inset 0 0 60px rgba(0, 0, 0, 0.5);
+    }
+    
+    #game-container canvas {
+      display: block;
+    }
+    
+    #ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 100;
+    }
+    
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    
+    .score-panel {
+      background: rgba(0, 0, 0, 0.7);
+      border: 2px solid;
+      padding: 10px 20px;
+      font-family: 'Orbitron', sans-serif;
+    }
+    
+    .score-panel.player1 {
+      border-color: #00ffff;
+      color: #00ffff;
+      text-shadow: 0 0 10px #00ffff;
+    }
+    
+    .score-panel.player2 {
+      border-color: #ff00ff;
+      color: #ff00ff;
+      text-shadow: 0 0 10px #ff00ff;
+    }
+    
+    .score-panel .name {
+      font-size: 14px;
+      opacity: 0.8;
+    }
+    
+    .score-panel .score {
+      font-size: 36px;
+      font-weight: 900;
+    }
+    
+    #timer {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      border: 2px solid #ffff00;
+      padding: 8px 24px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: #ffff00;
+      text-shadow: 0 0 10px #ffff00;
+    }
+    
+    #timer.warning {
+      animation: pulse 0.5s infinite;
+      border-color: #ff3333;
+      color: #ff3333;
+      text-shadow: 0 0 15px #ff3333;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    #message-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: auto;
+    }
+    
+    #message-overlay h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 48px;
+      font-weight: 900;
+      color: #fff;
+      text-shadow: 
+        0 0 20px #00ffff,
+        0 0 40px #ff00ff;
+      margin-bottom: 20px;
+      letter-spacing: 4px;
+    }
+    
+    #message-overlay p {
+      font-size: 18px;
+      color: #888;
+      margin-bottom: 10px;
+    }
+    
+    #message-overlay .winner {
+      font-size: 24px;
+      color: #00ff00;
+      text-shadow: 0 0 10px #00ff00;
+    }
+    
+    #controls-hint {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.6);
+      padding: 8px 16px;
+      font-size: 12px;
+      color: #666;
+      border: 1px solid #333;
+    }
+    
+    #controls-hint span {
+      color: #999;
+      margin: 0 10px;
+    }
+    
+    .hidden {
+      display: none !important;
+    }
+    
+    /* Kill feed */
+    #kill-feed {
+      position: absolute;
+      top: 80px;
+      right: 10px;
+      width: 250px;
+    }
+    
+    .kill-entry {
+      background: rgba(0, 0, 0, 0.7);
+      border-left: 3px solid #ff3333;
+      padding: 6px 12px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: #fff;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="ui-overlay">
+      <div id="hud" class="hidden">
+        <div class="score-panel player1">
+          <div class="name" id="p1-name">PLAYER 1</div>
+          <div class="score" id="p1-score">0</div>
+        </div>
+        <div id="timer">60</div>
+        <div class="score-panel player2">
+          <div class="name" id="p2-name">PLAYER 2</div>
+          <div class="score" id="p2-score">0</div>
+        </div>
+      </div>
+      
+      <div id="kill-feed"></div>
+      
+      <div id="message-overlay">
+        <h1>⚡ LASER ARENA ⚡</h1>
+        <p>Connecting to server...</p>
+      </div>
+      
+      <div id="controls-hint" class="hidden">
+        <span>WASD</span> Move
+        <span>MOUSE</span> Aim
+        <span>CLICK</span> Shoot
+        <span>|</span>
+        First to 5 kills wins!
+      </div>
+    </div>
+  </div>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
