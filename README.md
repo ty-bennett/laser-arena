@@ -1,42 +1,56 @@
-# LASER ARENA
+# Laser Arena
 
-A real-time multiplayer top-down shooter built for demo purposes. Two players battle it out in a pixel-art arena with laser weapons!
+Real-time multiplayer top-down shooter built with Node.js, Socket.IO, and Phaser.
 
-## Gameplay
+## Current Game Rules
 
-- **First to 5 kills wins** the round
-- **1-minute timer** - if time runs out, highest score wins (ties are draws)
-- **WASD** to move
-- **Mouse** to aim
-- **Click** to shoot lasers
-- Respawn after 2 seconds when killed
+- Supports up to **40 concurrent players** per server
+- **Free-for-all** mode
+- Rounds end at **20 total eliminations**
+- **Live leaderboard** in the top-right UI
+- **5 second respawn timer**
+- Random respawns that avoid obstacles
+- Obstacles are generated server-side and block both movement and laser shots
+- End-of-round victory screen with **top 3 performers**
 
-## To Start
+## Controls
+
+- `W/A/S/D`: Move
+- Mouse: Aim
+- Left click: Shoot
+
+## Run Locally (Node)
 
 ```bash
-# Build and run
-docker pull tybennett/laser-arena
-docker run -p 3000:3000 laser-arena
-
-# Or use docker-compose and clone from this repo
-docker-compose up (-d to run in detached state)
+npm install
+npm start
 ```
 
-Then open `http://localhost:3000` in two browser windows (or two different computers on the same network).
+Open `http://localhost:3000`.
 
-## Container Image Deployment
+## Docker Build
 
 ```bash
-# Build the image
 docker build -t laser-arena:latest .
-
-# Push to your registry (example with Docker Hub)
-docker tag laser-arena:latest your-registry/laser-arena:latest
-docker push your-registry/laser-arena:latest
 ```
 
-Then the container is hosted on an AZ Container App using the docker.io/tybennett/laser-arena:latest image 
+## Docker Compose (Two Containers)
 
----
+```bash
+docker compose up --build
+```
 
-Built for a kids' demo 🎮 Have fun!
+This brings up:
+
+- `laser-arena-1` on `http://localhost:3000`
+- `laser-arena-2` on `http://localhost:3001`
+
+Each container runs an independent arena server with capacity for up to 40 players.
+
+## Environment Variables
+
+- `PORT` (default `3000`)
+- `MAX_PLAYERS` (default `40`)
+- `MAP_WIDTH` (default `1200`)
+- `MAP_HEIGHT` (default `800`)
+

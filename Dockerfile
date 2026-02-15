@@ -1,24 +1,15 @@
-# Laser Arena - Multiplayer Game Container
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
+RUN npm ci --omit=dev
 
-# Install dependencies
-RUN npm i
+COPY . .
 
-# Copy game files
-COPY server/ ./server/
-COPY client/ ./client/
-
-# Expose game port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-3000}/ || exit 1
 
-# Run the game server
-CMD ["node", "server/index.js"]
+CMD ["npm", "start"]
