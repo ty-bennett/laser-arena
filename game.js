@@ -470,7 +470,7 @@ class LaserArena extends Phaser.Scene {
     const now = Date.now();
     const angleChanged = Math.abs(this.lastInputState.angle - this.mouseAngle) > 0.015;
     const moveChanged = this.lastInputState.moveX !== moveX || this.lastInputState.moveY !== moveY;
-    const stale = now - this.lastInputSentAt > 50;
+    const stale = now - this.lastInputSentAt > 16;
 
     if (stale || moveChanged || angleChanged) {
       this.socket.emit('input', {
