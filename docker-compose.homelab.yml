@@ -1,0 +1,46 @@
+services:
+  laser-arena:
+    build: .
+    image: laser-arena:latest
+    container_name: laser-arena
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - MAX_PLAYERS=${MAX_PLAYERS:-40}
+    expose:
+      - "3000"
+    networks:
+      - homelab_net
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: laser-caddy
+    depends_on:
+      - laser-arena
+    restart: unless-stopped
+    volumes:
+      - ./deploy/homelab/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "127.0.0.1:8080:80"
+    networks:
+      - homelab_net
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: laser-cloudflared
+    depends_on:
+      - caddy
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - homelab_net
+
+networks:
+  homelab_net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

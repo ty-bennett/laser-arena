@@ -37,6 +37,8 @@ const NEXT_ROUND_DELAY_MS = 6000;
 const MAX_SPAWN_ATTEMPTS = 120;
 const MIN_SPAWN_DISTANCE = 90;
 const MAX_NAME_LENGTH = 18;
+const CPU_BOT_ID = 'cpu-bot-1';
+const CPU_BOT_NAME = 'CPU Sentinel';
 
 const gameState = {
   players: {},
@@ -47,6 +49,7 @@ const gameState = {
   roundNumber: 0,
   roundEndsAt: 0,
   eliminations: 0,
+  botMatchRequesters: {},
   autoStartTimeout: null,
   autoNextRoundTimeout: null,
   lastStateBroadcastAt: 0
@@ -299,6 +302,14 @@ function activePlayerCount() {
   return Object.keys(gameState.players).length;
 }
 
+function activeHumanPlayerCount() {
+  return Object.values(gameState.players).filter((player) => !player.isBot).length;
+}
+
+function botMatchRequesterCount() {
+  return Object.keys(gameState.botMatchRequesters).length;
+}
+
 function buildLeaderboard() {
   return Object.entries(gameState.players)
     .map(([id, player]) => ({
@@ -368,6 +379,210 @@ function emitGameState(force = false) {
   });
 }
 
+function hasClearShot(x1, y1, x2, y2) {
+  for (const obstacle of gameState.obstacles) {
+    if (segmentIntersectsRect(x1, y1, x2, y2, obstacle)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function normalizeVector(x, y) {
+  const magnitude = Math.hypot(x, y);
+  if (magnitude < 0.000001) {
+    return { x: 0, y: 0 };
+  }
+
+  return {
+    x: x / magnitude,
+    y: y / magnitude
+  };
+}
+
+function chooseSafeDirection(player, desiredX, desiredY) {
+  const lookAheadDistance = GAME_CONFIG.PLAYER_SPEED * 0.22;
+  const candidates = [
+    { x: desiredX, y: desiredY },
+    { x: -desiredY, y: desiredX },
+    { x: desiredY, y: -desiredX },
+    { x: -desiredX, y: -desiredY },
+    { x: 0, y: 0 }
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeVector(candidate.x, candidate.y);
+    const sampleRect = playerRectAt(
+      player.x + normalized.x * lookAheadDistance,
+      player.y + normalized.y * lookAheadDistance
+    );
+
+    if (!collidesWithAnyObstacle(sampleRect)) {
+      return normalized;
+    }
+  }
+
+  return { x: 0, y: 0 };
+}
+
+function closestHumanTarget(sourcePlayerId) {
+  const source = gameState.players[sourcePlayerId];
+  if (!source) {
+    return null;
+  }
+
+  let bestTarget = null;
+  let bestDistance = Infinity;
+
+  for (const [id, player] of Object.entries(gameState.players)) {
+    if (id === sourcePlayerId || player.isBot || !player.alive) {
+      continue;
+    }
+
+    const distance = Math.hypot(player.x - source.x, player.y - source.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestTarget = { id, player, distance };
+    }
+  }
+
+  return bestTarget;
+}
+
+function fireLaserFromPlayer(playerId, angleOverride) {
+  if (!gameState.roundActive) {
+    return false;
+  }
+
+  const player = gameState.players[playerId];
+  if (!player || !player.alive) {
+    return false;
+  }
+
+  const now = Date.now();
+  if (now - player.lastShot < GAME_CONFIG.LASER_COOLDOWN) {
+    return false;
+  }
+
+  const angle = typeof angleOverride === 'number' ? angleOverride : player.angle;
+  player.angle = angle;
+  player.lastShot = now;
+
+  const spawnOffset = GAME_CONFIG.PLAYER_SIZE / 2 + 6;
+  const startX = player.x + Math.cos(angle) * spawnOffset;
+  const startY = player.y + Math.sin(angle) * spawnOffset;
+
+  if (pointHitsObstacle(startX, startY)) {
+    return false;
+  }
+
+  const laser = {
+    id: `${playerId}-${now}`,
+    ownerId: playerId,
+    x: startX,
+    y: startY,
+    prevX: startX,
+    prevY: startY,
+    vx: Math.cos(angle) * GAME_CONFIG.LASER_SPEED,
+    vy: Math.sin(angle) * GAME_CONFIG.LASER_SPEED,
+    angle,
+    color: player.color,
+    ttlMs: GAME_CONFIG.LASER_TTL_MS
+  };
+
+  gameState.lasers.push(laser);
+
+  io.emit('laserFired', {
+    playerId,
+    laser: {
+      x: laser.x,
+      y: laser.y,
+      angle: laser.angle,
+      color: laser.color
+    }
+  });
+
+  return true;
+}
+
+function createCpuBotPlayer() {
+  if (gameState.players[CPU_BOT_ID]) {
+    return;
+  }
+
+  const spawn = randomSpawn();
+
+  gameState.players[CPU_BOT_ID] = {
+    id: CPU_BOT_ID,
+    name: CPU_BOT_NAME,
+    color: '#ff8f5a',
+    x: spawn.x,
+    y: spawn.y,
+    angle: 0,
+    inputX: 0,
+    inputY: 0,
+    lastShot: 0,
+    alive: true,
+    respawnAt: 0,
+    isBot: true,
+    aiState: {
+      strafeDirection: Math.random() < 0.5 ? -1 : 1,
+      nextDecisionAt: 0,
+      nextDirectionSwapAt: 0,
+      nextShotAt: 0
+    }
+  };
+
+  gameState.scores[CPU_BOT_ID] = gameState.scores[CPU_BOT_ID] || 0;
+
+  io.emit('playerJoined', {
+    playerId: CPU_BOT_ID,
+    player: {
+      id: CPU_BOT_ID,
+      name: CPU_BOT_NAME,
+      color: gameState.players[CPU_BOT_ID].color,
+      x: spawn.x,
+      y: spawn.y,
+      angle: 0,
+      alive: true,
+      respawnAt: 0
+    },
+    playerCount: activePlayerCount(),
+    maxPlayers: GAME_CONFIG.MAX_PLAYERS
+  });
+
+  emitLeaderboard();
+  emitGameState(true);
+}
+
+function removeCpuBotPlayer() {
+  if (!gameState.players[CPU_BOT_ID]) {
+    return;
+  }
+
+  delete gameState.players[CPU_BOT_ID];
+  delete gameState.scores[CPU_BOT_ID];
+  gameState.lasers = gameState.lasers.filter((laser) => laser.ownerId !== CPU_BOT_ID);
+
+  io.emit('playerLeft', {
+    playerId: CPU_BOT_ID,
+    playerCount: activePlayerCount()
+  });
+
+  emitLeaderboard();
+  emitGameState(true);
+}
+
+function syncCpuBotPresence() {
+  if (botMatchRequesterCount() > 0 && activeHumanPlayerCount() > 0) {
+    createCpuBotPlayer();
+    return;
+  }
+
+  removeCpuBotPlayer();
+}
+
 function clearTimers() {
   if (gameState.autoStartTimeout) {
     clearTimeout(gameState.autoStartTimeout);
@@ -413,6 +628,14 @@ function resetRoundState() {
     player.lastShot = 0;
     player.respawnAt = 0;
     player.alive = true;
+
+    if (player.isBot && player.aiState) {
+      player.aiState.nextDecisionAt = 0;
+      player.aiState.nextDirectionSwapAt = 0;
+      player.aiState.nextShotAt = 0;
+      player.aiState.strafeDirection = Math.random() < 0.5 ? -1 : 1;
+    }
+
     gameState.scores[id] = 0;
   }
 }
@@ -570,6 +793,68 @@ function updatePlayers(deltaSeconds) {
   }
 }
 
+function updateCpuBot(now) {
+  const bot = gameState.players[CPU_BOT_ID];
+  if (!bot || !bot.alive || !gameState.roundActive) {
+    return;
+  }
+
+  const targetInfo = closestHumanTarget(CPU_BOT_ID);
+  if (!targetInfo) {
+    bot.inputX = 0;
+    bot.inputY = 0;
+    return;
+  }
+
+  const { player: target, distance } = targetInfo;
+  const offsetX = target.x - bot.x;
+  const offsetY = target.y - bot.y;
+  const toTarget = normalizeVector(offsetX, offsetY);
+  const clearShot = hasClearShot(bot.x, bot.y, target.x, target.y);
+
+  if (now >= bot.aiState.nextDirectionSwapAt) {
+    bot.aiState.strafeDirection *= Math.random() < 0.55 ? 1 : -1;
+    bot.aiState.nextDirectionSwapAt = now + 700 + Math.floor(Math.random() * 700);
+  }
+
+  if (now >= bot.aiState.nextDecisionAt) {
+    const strafeX = -toTarget.y * bot.aiState.strafeDirection;
+    const strafeY = toTarget.x * bot.aiState.strafeDirection;
+
+    let desiredX = 0;
+    let desiredY = 0;
+
+    if (!clearShot) {
+      desiredX = strafeX;
+      desiredY = strafeY;
+    } else if (distance > 330) {
+      desiredX = toTarget.x * 0.95;
+      desiredY = toTarget.y * 0.95;
+    } else if (distance < 170) {
+      desiredX = -toTarget.x;
+      desiredY = -toTarget.y;
+    } else {
+      desiredX = strafeX + toTarget.x * 0.25;
+      desiredY = strafeY + toTarget.y * 0.25;
+    }
+
+    const safeDirection = chooseSafeDirection(bot, desiredX, desiredY);
+    bot.inputX = safeDirection.x;
+    bot.inputY = safeDirection.y;
+    bot.aiState.nextDecisionAt = now + 70 + Math.floor(Math.random() * 80);
+  }
+
+  const aimAngle = Math.atan2(offsetY, offsetX);
+  bot.angle = aimAngle;
+
+  if (clearShot && distance < 560 && now >= bot.aiState.nextShotAt) {
+    const spread = distance > 420 ? 0.14 : 0.08;
+    const jitter = (Math.random() - 0.5) * spread;
+    fireLaserFromPlayer(CPU_BOT_ID, aimAngle + jitter);
+    bot.aiState.nextShotAt = now + 140 + Math.floor(Math.random() * 160);
+  }
+}
+
 function updateLasers(deltaSeconds) {
   const survivors = [];
 
@@ -640,6 +925,7 @@ function gameLoop() {
 
   const deltaSeconds = 1 / GAME_CONFIG.TICK_RATE;
 
+  updateCpuBot(now);
   updatePlayers(deltaSeconds);
   updateLasers(deltaSeconds);
   updateRespawns(now);
@@ -658,6 +944,7 @@ gameState.obstacles = generateObstacles();
 
 io.on('connection', (socket) => {
   socket.data.joined = false;
+  socket.data.wantsBotMatch = false;
 
   socket.emit('welcome', {
     config: GAME_CONFIG,
@@ -680,6 +967,12 @@ io.on('connection', (socket) => {
     }
 
     const name = sanitizeName(payload.name);
+    socket.data.wantsBotMatch = Boolean(payload.vsBot);
+
+    if (socket.data.wantsBotMatch) {
+      gameState.botMatchRequesters[socket.id] = true;
+    }
+
     const spawn = randomSpawn();
 
     gameState.players[socket.id] = {
@@ -693,7 +986,8 @@ io.on('connection', (socket) => {
       inputY: 0,
       lastShot: 0,
       alive: true,
-      respawnAt: 0
+      respawnAt: 0,
+      isBot: false
     };
 
     if (typeof gameState.scores[socket.id] !== 'number') {
@@ -701,6 +995,7 @@ io.on('connection', (socket) => {
     }
 
     socket.data.joined = true;
+    syncCpuBotPresence();
 
     socket.emit('init', {
       playerId: socket.id,
@@ -768,53 +1063,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const player = gameState.players[socket.id];
-    if (!player || !player.alive) {
-      return;
-    }
-
-    const now = Date.now();
-    if (now - player.lastShot < GAME_CONFIG.LASER_COOLDOWN) {
-      return;
-    }
-
-    const angle = typeof payload.angle === 'number' ? payload.angle : player.angle;
-    player.angle = angle;
-    player.lastShot = now;
-
-    const spawnOffset = GAME_CONFIG.PLAYER_SIZE / 2 + 6;
-    const startX = player.x + Math.cos(angle) * spawnOffset;
-    const startY = player.y + Math.sin(angle) * spawnOffset;
-
-    if (pointHitsObstacle(startX, startY)) {
-      return;
-    }
-
-    const laser = {
-      id: `${socket.id}-${now}`,
-      ownerId: socket.id,
-      x: startX,
-      y: startY,
-      prevX: startX,
-      prevY: startY,
-      vx: Math.cos(angle) * GAME_CONFIG.LASER_SPEED,
-      vy: Math.sin(angle) * GAME_CONFIG.LASER_SPEED,
-      angle,
-      color: player.color,
-      ttlMs: GAME_CONFIG.LASER_TTL_MS
-    };
-
-    gameState.lasers.push(laser);
-
-    io.emit('laserFired', {
-      playerId: socket.id,
-      laser: {
-        x: laser.x,
-        y: laser.y,
-        angle: laser.angle,
-        color: laser.color
-      }
-    });
+    fireLaserFromPlayer(socket.id, payload.angle);
   });
 
   socket.on('setName', (payload = {}) => {
@@ -837,8 +1086,10 @@ io.on('connection', (socket) => {
       return;
     }
 
+    delete gameState.botMatchRequesters[socket.id];
     delete gameState.players[socket.id];
     delete gameState.scores[socket.id];
+    syncCpuBotPresence();
 
     io.emit('playerLeft', {
       playerId: socket.id,

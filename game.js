@@ -66,11 +66,12 @@ class LaserArena extends Phaser.Scene {
   setupJoinUi() {
     const joinOverlay = document.getElementById('join-overlay');
     const joinButton = document.getElementById('join-btn');
+    const joinBotButton = document.getElementById('join-bot-btn');
     const nameInput = document.getElementById('player-name');
     const nameUpdateButton = document.getElementById('rename-btn');
     const nameUpdateInput = document.getElementById('rename-input');
 
-    const submitJoin = () => {
+    const submitJoin = (vsBot = false) => {
       const name = (nameInput.value || '').trim();
       if (!name) {
         this.setJoinStatus('Enter a display name first.');
@@ -82,14 +83,15 @@ class LaserArena extends Phaser.Scene {
         return;
       }
 
-      this.socket.emit('joinGame', { name });
-      this.setJoinStatus('Joining arena...');
+      this.socket.emit('joinGame', { name, vsBot });
+      this.setJoinStatus(vsBot ? 'Joining arena with CPU opponent...' : 'Joining arena...');
     };
 
-    joinButton.addEventListener('click', submitJoin);
+    joinButton.addEventListener('click', () => submitJoin(false));
+    joinBotButton.addEventListener('click', () => submitJoin(true));
     nameInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
-        submitJoin();
+        submitJoin(false);
       }
     });
 

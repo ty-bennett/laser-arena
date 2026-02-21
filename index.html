@@ -287,6 +287,22 @@
       margin-bottom: 12px;
     }
 
+    .join-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .join-actions button {
+      flex: 1;
+      min-width: 0;
+    }
+
+    #join-bot-btn {
+      background: linear-gradient(135deg, #ff9159, #ffcf73);
+      color: #241106;
+    }
+
     input,
     button {
       font-family: inherit;
@@ -424,7 +440,10 @@
           <p>40-player free-for-all. Obstacles block movement and shots. Enter your callsign to join.</p>
           <div class="name-input-row">
             <input id="player-name" maxlength="18" placeholder="Your name" />
-            <button id="join-btn">Join</button>
+          </div>
+          <div class="join-actions">
+            <button id="join-btn">Join Online</button>
+            <button id="join-bot-btn">Join vs CPU</button>
           </div>
           <div id="join-status">Connecting...</div>
         </div>
