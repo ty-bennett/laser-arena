@@ -15,8 +15,8 @@ const io = new Server(server, {
 app.use(express.static(path.join(__dirname)));
 
 const GAME_CONFIG = {
-  MAP_WIDTH: Number(process.env.MAP_WIDTH || 1200),
-  MAP_HEIGHT: Number(process.env.MAP_HEIGHT || 800),
+  MAP_WIDTH: Number(process.env.MAP_WIDTH || 2400),
+  MAP_HEIGHT: Number(process.env.MAP_HEIGHT || 1600),
   PLAYER_SPEED: 220,
   PLAYER_SIZE: 30,
   LASER_SPEED: 780,
@@ -813,8 +813,8 @@ function updateCpuBot(now) {
   const clearShot = hasClearShot(bot.x, bot.y, target.x, target.y);
 
   if (now >= bot.aiState.nextDirectionSwapAt) {
-    bot.aiState.strafeDirection *= Math.random() < 0.55 ? 1 : -1;
-    bot.aiState.nextDirectionSwapAt = now + 700 + Math.floor(Math.random() * 700);
+    bot.aiState.strafeDirection *= Math.random() < 0.68 ? 1 : -1;
+    bot.aiState.nextDirectionSwapAt = now + 900 + Math.floor(Math.random() * 900);
   }
 
   if (now >= bot.aiState.nextDecisionAt) {
@@ -827,31 +827,32 @@ function updateCpuBot(now) {
     if (!clearShot) {
       desiredX = strafeX;
       desiredY = strafeY;
-    } else if (distance > 330) {
-      desiredX = toTarget.x * 0.95;
-      desiredY = toTarget.y * 0.95;
-    } else if (distance < 170) {
+    } else if (distance > 360) {
+      desiredX = toTarget.x * 0.72;
+      desiredY = toTarget.y * 0.72;
+    } else if (distance < 180) {
       desiredX = -toTarget.x;
       desiredY = -toTarget.y;
     } else {
-      desiredX = strafeX + toTarget.x * 0.25;
-      desiredY = strafeY + toTarget.y * 0.25;
+      desiredX = strafeX + toTarget.x * 0.15;
+      desiredY = strafeY + toTarget.y * 0.15;
     }
 
     const safeDirection = chooseSafeDirection(bot, desiredX, desiredY);
     bot.inputX = safeDirection.x;
     bot.inputY = safeDirection.y;
-    bot.aiState.nextDecisionAt = now + 70 + Math.floor(Math.random() * 80);
+    bot.aiState.nextDecisionAt = now + 120 + Math.floor(Math.random() * 140);
   }
 
   const aimAngle = Math.atan2(offsetY, offsetX);
   bot.angle = aimAngle;
 
-  if (clearShot && distance < 560 && now >= bot.aiState.nextShotAt) {
-    const spread = distance > 420 ? 0.14 : 0.08;
-    const jitter = (Math.random() - 0.5) * spread;
-    fireLaserFromPlayer(CPU_BOT_ID, aimAngle + jitter);
-    bot.aiState.nextShotAt = now + 140 + Math.floor(Math.random() * 160);
+  if (clearShot && distance < 500 && now >= bot.aiState.nextShotAt && Math.random() < 0.72) {
+    const errorDegrees = Math.random() * 10;
+    const errorRadians = (errorDegrees * Math.PI) / 180;
+    const jitterDirection = Math.random() < 0.5 ? -1 : 1;
+    fireLaserFromPlayer(CPU_BOT_ID, aimAngle + errorRadians * jitterDirection);
+    bot.aiState.nextShotAt = now + 260 + Math.floor(Math.random() * 220);
   }
 }
 

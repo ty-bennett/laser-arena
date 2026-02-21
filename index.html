@@ -125,14 +125,14 @@
       position: absolute;
       top: 0;
       right: 0;
-      width: 320px;
-      padding: 10px;
+      width: 248px;
+      padding: 8px;
     }
 
     #leaderboard h3 {
       font-family: 'Orbitron', sans-serif;
-      font-size: 14px;
-      margin-bottom: 8px;
+      font-size: 12px;
+      margin-bottom: 6px;
       color: var(--accent);
       letter-spacing: 1px;
       text-transform: uppercase;
@@ -148,14 +148,14 @@
 
     .leaderboard-row {
       display: grid;
-      grid-template-columns: 42px 1fr 42px;
+      grid-template-columns: 34px 1fr 34px;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       background: rgba(19, 30, 56, 0.82);
       border: 1px solid rgba(83, 109, 170, 0.4);
       border-radius: 6px;
-      padding: 5px 8px;
-      font-size: 13px;
+      padding: 4px 7px;
+      font-size: 11px;
     }
 
     .leaderboard-row .rank,
@@ -182,8 +182,8 @@
     #kill-feed {
       position: absolute;
       right: 0;
-      top: 344px;
-      width: 320px;
+      top: 286px;
+      width: 248px;
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -227,6 +227,77 @@
     #controls-hint strong {
       color: #d5e4ff;
       font-weight: 700;
+    }
+
+    #mobile-controls {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 14px;
+      width: auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      pointer-events: auto;
+      z-index: 220;
+    }
+
+    .mobile-pad {
+      width: 124px;
+      height: 124px;
+      border-radius: 50%;
+      border: 1px solid rgba(126, 156, 229, 0.52);
+      background: radial-gradient(circle at 35% 35%, rgba(88, 214, 255, 0.14), rgba(3, 9, 21, 0.82));
+      box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.45);
+      position: relative;
+      touch-action: none;
+    }
+
+    .mobile-stick {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      border: 1px solid rgba(160, 197, 255, 0.7);
+      background: radial-gradient(circle at 35% 35%, rgba(155, 214, 255, 0.8), rgba(33, 76, 143, 0.85));
+      box-shadow: 0 0 16px rgba(71, 149, 255, 0.4);
+      pointer-events: none;
+    }
+
+    .mobile-pad-label {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      bottom: -22px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 10px;
+      letter-spacing: 1px;
+      color: #8ea8d7;
+      pointer-events: none;
+    }
+
+    #mobile-fire-btn {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      min-width: 0;
+      padding: 0;
+      margin-bottom: 16px;
+      background: linear-gradient(145deg, #ff526b, #ff9650);
+      color: #2f0b02;
+      font-size: 14px;
+      letter-spacing: 1px;
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.36), inset 0 2px 10px rgba(255, 255, 255, 0.16);
+      touch-action: none;
+    }
+
+    #mobile-fire-btn.is-active {
+      transform: scale(0.94);
+      filter: brightness(1.1);
     }
 
     #respawn-timer {
@@ -397,11 +468,29 @@
 
       #leaderboard,
       #kill-feed {
-        width: 260px;
+        width: 220px;
       }
 
       #controls-hint {
         font-size: 11px;
+      }
+    }
+
+    @media (pointer: coarse) {
+      #controls-hint {
+        bottom: 144px;
+        white-space: normal;
+        text-align: center;
+        max-width: min(90vw, 500px);
+        line-height: 1.35;
+      }
+
+      #quick-rename {
+        display: none;
+      }
+
+      #kill-feed {
+        width: 220px;
       }
     }
   </style>
@@ -431,6 +520,14 @@
           <strong>Mouse</strong> aim
           <strong>Click</strong> fire
           <strong>Goal</strong> first 20 eliminations in round
+        </div>
+
+        <div id="mobile-controls" class="hidden">
+          <div id="mobile-move-pad" class="mobile-pad">
+            <div id="mobile-move-stick" class="mobile-stick"></div>
+            <div class="mobile-pad-label">MOVE + AIM</div>
+          </div>
+          <button id="mobile-fire-btn" type="button">FIRE</button>
         </div>
       </div>
 

@@ -19,6 +19,7 @@ Real-time multiplayer top-down shooter built with Node.js, Socket.IO, and Phaser
 - `W/A/S/D`: Move
 - Mouse: Aim
 - Left click: Shoot
+- Mobile: Joystick move+aim, fire button shoot
 
 ## Run Locally (Node)
 
@@ -82,5 +83,5 @@ Notes:
 
 - `PORT` (default `3000`)
 - `MAX_PLAYERS` (default `40`)
-- `MAP_WIDTH` (default `1200`)
-- `MAP_HEIGHT` (default `800`)
+- `MAP_WIDTH` (default `2400`)
+- `MAP_HEIGHT` (default `1600`)

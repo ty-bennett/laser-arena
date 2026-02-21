@@ -25,6 +25,13 @@ class LaserArena extends Phaser.Scene {
     this.keys = null;
     this.lastInputSentAt = 0;
     this.lastInputState = { moveX: 0, moveY: 0, angle: 0 };
+    this.isTouchDevice = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+    this.mobileMove = { x: 0, y: 0, pointerId: null };
+    this.mobileAutoFire = false;
+    this.mobileFirePointerId = null;
+    this.lastMobileShotAt = 0;
+    this.arenaGraphics = null;
+    this.cameraFollowing = false;
 
     this.obstacleGraphics = null;
     this.laserGraphics = null;
@@ -33,6 +40,7 @@ class LaserArena extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#0f1428');
 
+    this.arenaGraphics = this.add.graphics();
     this.obstacleGraphics = this.add.graphics();
     this.laserGraphics = this.add.graphics();
 
@@ -44,6 +52,10 @@ class LaserArena extends Phaser.Scene {
     });
 
     this.input.on('pointermove', (pointer) => {
+      if (this.isTouchDevice) {
+        return;
+      }
+
       const local = this.playerSprites[this.playerId];
       if (!local) {
         return;
@@ -53,12 +65,18 @@ class LaserArena extends Phaser.Scene {
     });
 
     this.input.on('pointerdown', () => {
+      if (this.isTouchDevice) {
+        return;
+      }
+
       if (this.joined && this.roundActive && this.isAlive) {
         this.socket.emit('shoot', { angle: this.mouseAngle });
       }
     });
 
     this.drawArenaBorder();
+    this.configureWorldBounds();
+    this.setupMobileControls();
     this.setupJoinUi();
     this.connectToServer();
   }
@@ -114,6 +132,133 @@ class LaserArena extends Phaser.Scene {
     joinOverlay.classList.remove('hidden');
   }
 
+  setupMobileControls() {
+    const controls = document.getElementById('mobile-controls');
+    const movePad = document.getElementById('mobile-move-pad');
+    const moveStick = document.getElementById('mobile-move-stick');
+    const fireButton = document.getElementById('mobile-fire-btn');
+
+    if (!controls || !movePad || !moveStick || !fireButton) {
+      return;
+    }
+
+    if (!this.isTouchDevice) {
+      controls.classList.add('hidden');
+      return;
+    }
+
+    controls.classList.remove('hidden');
+
+    const setStickOffset = (stick, x, y) => {
+      stick.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    };
+
+    const resetMovePad = () => {
+      this.mobileMove.x = 0;
+      this.mobileMove.y = 0;
+      this.mobileMove.pointerId = null;
+      setStickOffset(moveStick, 0, 0);
+    };
+
+    const applyPadInput = (event, pad, stick, onVector) => {
+      const rect = pad.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const radius = Math.max(26, Math.min(rect.width, rect.height) * 0.35);
+      const deltaX = event.clientX - centerX;
+      const deltaY = event.clientY - centerY;
+      const distance = Math.hypot(deltaX, deltaY);
+      const clampScale = distance > radius ? radius / distance : 1;
+      const clampedX = deltaX * clampScale;
+      const clampedY = deltaY * clampScale;
+
+      setStickOffset(stick, clampedX, clampedY);
+      onVector(clampedX / radius, clampedY / radius);
+    };
+
+    const emitMobileShot = (now) => {
+      if (!this.joined || !this.roundActive || !this.isAlive) {
+        return;
+      }
+
+      this.socket.emit('shoot', { angle: this.mouseAngle });
+      this.lastMobileShotAt = now;
+    };
+
+    movePad.addEventListener('pointerdown', (event) => {
+      if (this.mobileMove.pointerId !== null) {
+        return;
+      }
+
+      event.preventDefault();
+      this.mobileMove.pointerId = event.pointerId;
+      movePad.setPointerCapture(event.pointerId);
+      applyPadInput(event, movePad, moveStick, (moveX, moveY) => {
+        this.mobileMove.x = moveX;
+        this.mobileMove.y = moveY;
+        if (Math.hypot(moveX, moveY) > 0.08) {
+          this.mouseAngle = Math.atan2(moveY, moveX);
+        }
+      });
+    });
+
+    movePad.addEventListener('pointermove', (event) => {
+      if (this.mobileMove.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      applyPadInput(event, movePad, moveStick, (moveX, moveY) => {
+        this.mobileMove.x = moveX;
+        this.mobileMove.y = moveY;
+        if (Math.hypot(moveX, moveY) > 0.08) {
+          this.mouseAngle = Math.atan2(moveY, moveX);
+        }
+      });
+    });
+
+    const endMoveTouch = (event) => {
+      if (this.mobileMove.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      movePad.releasePointerCapture(event.pointerId);
+      resetMovePad();
+    };
+
+    movePad.addEventListener('pointerup', endMoveTouch);
+    movePad.addEventListener('pointercancel', endMoveTouch);
+
+    fireButton.addEventListener('pointerdown', (event) => {
+      if (this.mobileFirePointerId !== null) {
+        return;
+      }
+
+      event.preventDefault();
+      this.mobileFirePointerId = event.pointerId;
+      this.mobileAutoFire = true;
+      fireButton.classList.add('is-active');
+      fireButton.setPointerCapture(event.pointerId);
+      emitMobileShot(Date.now());
+    });
+
+    const endFireTouch = (event) => {
+      if (this.mobileFirePointerId !== event.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      this.mobileFirePointerId = null;
+      this.mobileAutoFire = false;
+      fireButton.classList.remove('is-active');
+      fireButton.releasePointerCapture(event.pointerId);
+    };
+
+    fireButton.addEventListener('pointerup', endFireTouch);
+    fireButton.addEventListener('pointercancel', endFireTouch);
+  }
+
   connectToServer() {
     this.socket = io();
 
@@ -127,12 +272,16 @@ class LaserArena extends Phaser.Scene {
       this.connected = false;
       this.joined = false;
       this.roundActive = false;
+      this.cameraFollowing = false;
+      this.cameras.main.stopFollow();
       this.setBanner('Disconnected. Refresh to reconnect.');
     });
 
     this.socket.on('welcome', (data) => {
       this.configFromServer = data.config;
       this.obstacles = data.obstacles || [];
+      this.configureWorldBounds();
+      this.drawArenaBorder();
       this.drawObstacles();
 
       const seats = `${data.currentPlayers}/${data.maxPlayers}`;
@@ -148,6 +297,7 @@ class LaserArena extends Phaser.Scene {
     this.socket.on('init', (data) => {
       this.joined = true;
       this.playerId = data.playerId;
+      this.configFromServer = data.config || this.configFromServer;
       this.players = data.players || {};
       this.obstacles = data.obstacles || this.obstacles;
       this.eliminations = data.eliminations || 0;
@@ -155,6 +305,8 @@ class LaserArena extends Phaser.Scene {
       this.roundActive = Boolean(data.roundActive);
       this.roundEndsAt = data.roundEndsAt || 0;
 
+      this.configureWorldBounds();
+      this.drawArenaBorder();
       this.drawObstacles();
       this.syncPlayerSprites();
       this.updateLeaderboard(data.leaderboard || []);
@@ -284,18 +436,40 @@ class LaserArena extends Phaser.Scene {
     });
   }
 
-  drawArenaBorder() {
-    const border = this.add.graphics();
-    border.lineStyle(3, 0x344264, 1);
-    border.strokeRect(0, 0, 1200, 800);
+  getMapDimensions() {
+    return {
+      width: this.configFromServer?.MAP_WIDTH || 1200,
+      height: this.configFromServer?.MAP_HEIGHT || 800
+    };
+  }
 
-    border.lineStyle(1, 0x1b2742, 0.5);
-    for (let x = 0; x < 1200; x += 50) {
-      border.lineBetween(x, 0, x, 800);
+  configureWorldBounds() {
+    const { width, height } = this.getMapDimensions();
+    this.cameras.main.setBounds(0, 0, width, height);
+
+    if (this.physics?.world) {
+      this.physics.world.setBounds(0, 0, width, height);
+    }
+  }
+
+  drawArenaBorder() {
+    if (!this.arenaGraphics) {
+      return;
     }
 
-    for (let y = 0; y < 800; y += 50) {
-      border.lineBetween(0, y, 1200, y);
+    const { width, height } = this.getMapDimensions();
+
+    this.arenaGraphics.clear();
+    this.arenaGraphics.lineStyle(3, 0x344264, 1);
+    this.arenaGraphics.strokeRect(0, 0, width, height);
+
+    this.arenaGraphics.lineStyle(1, 0x1b2742, 0.5);
+    for (let x = 0; x <= width; x += 50) {
+      this.arenaGraphics.lineBetween(x, 0, x, height);
+    }
+
+    for (let y = 0; y <= height; y += 50) {
+      this.arenaGraphics.lineBetween(0, y, width, y);
     }
   }
 
@@ -447,29 +621,49 @@ class LaserArena extends Phaser.Scene {
       return;
     }
 
+    if (!this.cameraFollowing) {
+      this.cameras.main.startFollow(localSprite, true, 0.12, 0.12);
+      this.cameraFollowing = true;
+    }
+
     let moveX = 0;
     let moveY = 0;
-
-    if (this.keys.left.isDown) {
-      moveX -= 1;
-    }
-    if (this.keys.right.isDown) {
-      moveX += 1;
-    }
-    if (this.keys.up.isDown) {
-      moveY -= 1;
-    }
-    if (this.keys.down.isDown) {
-      moveY += 1;
-    }
-
-    const magnitude = Math.hypot(moveX, moveY);
-    if (magnitude > 1) {
-      moveX /= magnitude;
-      moveY /= magnitude;
-    }
-
     const now = Date.now();
+
+    if (this.isTouchDevice) {
+      moveX = this.mobileMove.x;
+      moveY = this.mobileMove.y;
+      if (Math.hypot(moveX, moveY) > 0.08) {
+        this.mouseAngle = Math.atan2(moveY, moveX);
+      }
+
+      if (this.mobileAutoFire && now - this.lastMobileShotAt >= 150) {
+        if (this.joined && this.roundActive && this.isAlive) {
+          this.socket.emit('shoot', { angle: this.mouseAngle });
+          this.lastMobileShotAt = now;
+        }
+      }
+    } else {
+      if (this.keys.left.isDown) {
+        moveX -= 1;
+      }
+      if (this.keys.right.isDown) {
+        moveX += 1;
+      }
+      if (this.keys.up.isDown) {
+        moveY -= 1;
+      }
+      if (this.keys.down.isDown) {
+        moveY += 1;
+      }
+
+      const magnitude = Math.hypot(moveX, moveY);
+      if (magnitude > 1) {
+        moveX /= magnitude;
+        moveY /= magnitude;
+      }
+    }
+
     const angleChanged = Math.abs(this.lastInputState.angle - this.mouseAngle) > 0.015;
     const moveChanged = this.lastInputState.moveX !== moveX || this.lastInputState.moveY !== moveY;
     const stale = now - this.lastInputSentAt > 16;
@@ -572,7 +766,15 @@ class LaserArena extends Phaser.Scene {
 
   showHud() {
     document.getElementById('hud').classList.remove('hidden');
-    document.getElementById('controls-hint').classList.remove('hidden');
+    const controlsHint = document.getElementById('controls-hint');
+
+    if (this.isTouchDevice) {
+      controlsHint.classList.add('hidden');
+      document.getElementById('mobile-controls').classList.remove('hidden');
+      return;
+    }
+
+    controlsHint.classList.remove('hidden');
   }
 
   setBanner(text) {
